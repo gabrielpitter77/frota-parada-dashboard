@@ -410,33 +410,40 @@ async function fetchAba(atendente){
     const parsed = Papa.parse(text, { skipEmptyLines: false });
     const rows = parsed.data;
 
+    // A célula "Código" (coluna A) e as colunas de data vêm em branco no
+    // export CSV desta planilha, então localizamos o cabeçalho pela dupla
+    // "Motivo" (col B) + "Placa" (col C), que sempre vem preenchida, e
+    // depois lemos os dados por posição fixa de coluna (0-indexado):
+    // 0 Código, 1 Motivo, 2 Placa, 3 Modelo, 4 Cliente, 5 Fornecedor,
+    // 6 Cidade, 7 Dt.Atendimento, 8 Dt.Agendamento, 9 Dt.Parada,
+    // 10 Dias Parado, 11 Situação Atual, 12 Pendência, 13 Status,
+    // 14 Prazo Liberação, 15 Veículo reserva, 16 Obs, 17 Classificação
     var headerIdx = -1;
     for(var h=0; h<rows.length; h++){
-      if((rows[h][0] || '').trim() === 'Código'){ headerIdx = h; break; }
+      const c1 = (rows[h][1] || '').trim();
+      const c2 = (rows[h][2] || '').trim();
+      if(c1 === 'Motivo' && c2 === 'Placa'){ headerIdx = h; break; }
     }
-    if(headerIdx === -1) return [];
-    const headers = rows[headerIdx];
-    const col = {};
-    headers.forEach(function(h, i){ if(h && h.trim()) col[h.trim()] = i; });
+    if(headerIdx === -1) throw new Error('cabeçalho não encontrado (formato inesperado)');
 
     const out = [];
     for(var i = headerIdx + 1; i < rows.length; i++){
       const r = rows[i];
-      const codigo = (r[col['Código']] || '').trim();
-      const placa = (r[col['Placa']] || '').trim();
-      if(!codigo && !placa) continue;
-      const diasParado = parseInt((r[col['Dias Parado']] || '').trim(), 10);
+      const codigo = (r[0] || '').trim();
+      const placa = (r[2] || '').trim();
+      if(!codigo && !placa) continue; // linha em branco = fim dos dados
+      const diasParado = parseInt((r[10] || '').trim(), 10);
       out.push({
         codigo: codigo,
-        motivo: (r[col['Motivo']] || '').trim(),
+        motivo: (r[1] || '').trim(),
         placa: placa,
-        veiculo: (r[col['Modelo']] || '').trim(),
-        cliente: (r[col['Cliente']] || '').trim(),
-        fornecedor: (r[col['Fornecedor']] || '-').trim() || '-',
-        cidade: (r[col['Cidade']] || '').trim(),
+        veiculo: (r[3] || '').trim(),
+        cliente: (r[4] || '').trim(),
+        fornecedor: (r[5] || '-').trim() || '-',
+        cidade: (r[6] || '').trim(),
         dias: Number.isFinite(diasParado) ? diasParado : 0,
-        situacaoAtual: (r[col['Situação Atual']] || '').trim(),
-        pendencia: (r[col['Pendência']] || '').trim(),
+        situacaoAtual: (r[11] || '').trim(),
+        pendencia: (r[12] || '').trim(),
         atendente: atendente.nome
       });
     }
