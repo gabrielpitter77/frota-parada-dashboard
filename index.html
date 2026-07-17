@@ -319,15 +319,6 @@
   <!-- Faixas -->
   <section class="faixa-grid" id="faixaGrid" aria-label="Veículos por faixa de dias"></section>
 
-  <!-- Críticos -->
-  <section class="panel crit-panel">
-    <div class="section-head">
-      <h2>🚨 Veículos críticos (≥ 4 dias parados)</h2>
-      <span class="eyebrow" id="critCount">0 VEÍCULOS</span>
-    </div>
-    <div class="crit-list" id="critList"></div>
-  </section>
-
   <!-- Filtros -->
   <div class="panel filter-bar">
     <input type="text" class="search-input" id="searchInput" placeholder="Buscar por placa, veículo, atendente, cliente ou fornecedor…">
@@ -346,13 +337,14 @@
       <table>
         <thead>
           <tr>
+            <th data-key="atendente">Atendente <span class="arrow"></span></th>
+            <th data-key="motivo">Motivo</th>
             <th data-key="placa">Placa <span class="arrow"></span></th>
             <th data-key="veiculo">Veículo <span class="arrow"></span></th>
-            <th data-key="atendente">Atendente <span class="arrow"></span></th>
             <th data-key="cliente">Cliente <span class="arrow"></span></th>
             <th data-key="fornecedor">Fornecedor <span class="arrow"></span></th>
-            <th data-key="motivo">Motivo</th>
             <th data-key="dias">Dias parado <span class="arrow"></span></th>
+            <th data-key="solucao">Solução</th>
             <th data-key="status">Status <span class="arrow"></span></th>
           </tr>
         </thead>
@@ -365,9 +357,19 @@
     </div>
   </section>
 
+  <!-- Críticos -->
+  <section class="panel crit-panel">
+    <div class="section-head">
+      <h2>🚨 Veículos críticos (≥ 4 dias parados)</h2>
+      <span class="eyebrow" id="critCount">0 VEÍCULOS</span>
+    </div>
+    <input type="text" class="search-input" id="critSearchInput" placeholder="Filtrar críticos por placa, veículo ou atendente…" style="margin-bottom:12px;">
+    <div class="crit-list" id="critList"></div>
+  </section>
+
 </main>
 
-<footer>CONTROLE DE FROTA PARADA — v2.0 · LAYOUT COM DADOS DE EXEMPLO · PRÓXIMA ETAPA: INTEGRAÇÃO GOOGLE SHEETS</footer>
+<footer>CONTROLE DE FROTA PARADA — v2.0 · INTEGRADO AO GOOGLE SHEETS</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
@@ -444,6 +446,7 @@ async function fetchAba(atendente){
         dias: Number.isFinite(diasParado) ? diasParado : 0,
         situacaoAtual: (r[11] || '').trim(),
         pendencia: (r[12] || '').trim(),
+        obs: (r[16] || '').trim(),
         atendente: atendente.nome
       });
     }
@@ -530,14 +533,24 @@ document.getElementById('faixaGrid').innerHTML = faixas.map(f => `
 /* ---------- Críticos ---------- */
 const criticosLista = frota.filter(v=>v.status==='critico').sort((a,b)=>b.dias-a.dias);
 document.getElementById('critCount').textContent = `${criticosLista.length} VEÍCULOS`;
-document.getElementById('critList').innerHTML = criticosLista.length ? criticosLista.map(v => `
-  <div class="crit-row">
-    <span class="pulse"></span>
-    <span class="crit-veic">${v.placa}</span>
-    <span class="crit-info">${v.veiculo} · ${v.atendente} · ${v.motivo} · ${v.fornecedor}</span>
-    <span class="crit-dias">${v.dias}d</span>
-  </div>
-`).join('') : '<div style="color:var(--text-dim); font-size:13px; padding:10px 0;">Nenhum veículo crítico no momento.</div>';
+
+function renderCriticos(){
+  const term = (document.getElementById('critSearchInput').value || '').toLowerCase();
+  const filtrados = !term ? criticosLista : criticosLista.filter(v =>
+    [v.placa, v.veiculo, v.atendente].some(f => (f||'').toLowerCase().includes(term))
+  );
+  document.getElementById('critCount').textContent = `${filtrados.length} VEÍCULOS`;
+  document.getElementById('critList').innerHTML = filtrados.length ? filtrados.map(v => `
+    <div class="crit-row">
+      <span class="pulse"></span>
+      <span class="crit-veic">${v.placa}</span>
+      <span class="crit-info">${v.veiculo} · ${v.atendente} · ${v.motivo} · ${v.fornecedor}</span>
+      <span class="crit-dias">${v.dias}d</span>
+    </div>
+  `).join('') : '<div style="color:var(--text-dim); font-size:13px; padding:10px 0;">Nenhum veículo crítico encontrado.</div>';
+}
+document.getElementById('critSearchInput').addEventListener('input', renderCriticos);
+renderCriticos();
 
 /* ---------- Distribuição por dias parado (dados reais, canvas nativo) ---------- */
 function desenharEvolucao(){
@@ -653,18 +666,22 @@ function renderTable(){
     return 0;
   });
 
-  document.getElementById('tableBody').innerHTML = rows.map(v => `
+  document.getElementById('tableBody').innerHTML = rows.map(v => {
+    const solucao = [v.pendencia, v.obs].filter(Boolean).join(' — ') || '-';
+    return `
     <tr>
+      <td>${v.atendente}</td>
+      <td>${v.motivo}</td>
       <td class="veic">${v.placa}</td>
       <td>${v.veiculo}</td>
-      <td>${v.atendente}</td>
       <td>${v.cliente || '-'}</td>
       <td>${v.fornecedor}</td>
-      <td>${v.motivo}</td>
       <td class="dias">${v.dias}d</td>
+      <td>${solucao}</td>
       <td><span class="status-pill ${v.status}">${v.status}</span></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   document.getElementById('rowCount').textContent = `${rows.length} registro${rows.length!==1?'s':''}`;
 }
