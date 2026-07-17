@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Frota Parada — Loc Frota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E14;
+    --panel:#121620;
+    --panel-2:#161B26;
+    --border:#232838;
+    --text:#E7EAF0;
+    --text-muted:#8891A3;
+    --text-dim:#5A6274;
+    --blue:#3B82F6;
+    --blue-dim:#1E3A6B;
+    --critico:#FF5C5C;
+    --critico-dim:#3D1B1E;
+    --atencao:#F5A623;
+    --atencao-dim:#3D2E10;
+    --normal:#2ED3A6;
+    --normal-dim:#123A30;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(59,130,246,0.06), transparent 40%),
+      radial-gradient(circle at 85% 20%, rgba(46,211,166,0.04), transparent 35%);
+  }
+  ::selection{background:var(--blue-dim); color:var(--text);}
+  a{color:inherit;}
+
+  /* ---------- utility ---------- */
+  .mono{font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;}
+  .display{font-family:'Space Grotesk', sans-serif;}
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:4px;
+    position:relative;
+  }
+  .panel::before, .panel::after{
+    content:''; position:absolute; width:8px; height:8px;
+    border:1px solid var(--text-dim); opacity:0.5;
+  }
+  .panel::before{ top:-1px; left:-1px; border-right:none; border-bottom:none; }
+  .panel::after{ bottom:-1px; right:-1px; border-left:none; border-top:none; }
+
+  /* ---------- header ---------- */
+  header{
+    border-bottom:1px solid var(--border);
+    background:rgba(11,14,20,0.92);
+    backdrop-filter:blur(6px);
+    position:sticky; top:0; z-index:50;
+  }
+  .header-top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 28px;
+    max-width:1440px; margin:0 auto;
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{
+    width:34px; height:34px; border-radius:3px;
+    background:linear-gradient(135deg, var(--blue), var(--normal));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; font-size:15px; color:#04101B;
+    flex-shrink:0;
+  }
+  .brand-text h1{font-family:'Space Grotesk'; font-size:16px; font-weight:600; letter-spacing:0.01em;}
+  .brand-text span{font-size:11px; color:var(--text-dim); font-family:'IBM Plex Mono';}
+  .header-status{display:flex; align-items:center; gap:22px;}
+  .live-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--normal);
+    box-shadow:0 0 0 0 rgba(46,211,166,0.6);
+    animation:pulse-dot 2s infinite;
+  }
+  @keyframes pulse-dot{
+    0%{box-shadow:0 0 0 0 rgba(46,211,166,0.5);}
+    70%{box-shadow:0 0 0 6px rgba(46,211,166,0);}
+    100%{box-shadow:0 0 0 0 rgba(46,211,166,0);}
+  }
+  .live-label{font-family:'IBM Plex Mono'; font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:7px;}
+  #clock{font-family:'IBM Plex Mono'; font-size:12px; color:var(--text-muted);}
+
+  /* ticker */
+  .ticker-wrap{
+    border-top:1px solid var(--border);
+    background:var(--panel-2);
+    overflow:hidden; white-space:nowrap;
+    padding:7px 0;
+  }
+  .ticker{
+    display:inline-block; padding-left:100%;
+    animation:ticker 38s linear infinite;
+    font-family:'IBM Plex Mono'; font-size:12px; color:var(--text-muted);
+  }
+  .ticker b{color:var(--critico); font-weight:600;}
+  @keyframes ticker{ 0%{transform:translateX(0);} 100%{transform:translateX(-100%);} }
+  @media (prefers-reduced-motion: reduce){
+    .ticker{animation:none; padding-left:24px;}
+    .live-dot{animation:none;}
+  }
+
+  main{max-width:1440px; margin:0 auto; padding:28px;}
+
+  /* ---------- KPI row ---------- */
+  .kpi-grid{
+    display:grid;
+    grid-template-columns:repeat(5, 1fr);
+    gap:14px;
+    margin-bottom:22px;
+  }
+  .kpi{padding:18px 20px;}
+  .kpi .eyebrow{margin-bottom:10px;}
+  .kpi .value{font-family:'IBM Plex Mono'; font-size:30px; font-weight:600; line-height:1;}
+  .kpi .delta{font-size:11px; margin-top:8px; color:var(--text-muted); font-family:'IBM Plex Mono';}
+  .kpi .delta.up{color:var(--critico);}
+  .kpi .delta.down{color:var(--normal);}
+  .kpi.accent-blue .value{color:var(--blue);}
+  .kpi.accent-critico .value{color:var(--critico);}
+  .kpi.accent-atencao .value{color:var(--atencao);}
+  .kpi.accent-normal .value{color:var(--normal);}
+
+  /* ---------- section title ---------- */
+  .section-head{
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .section-head h2{font-family:'Space Grotesk'; font-size:14px; font-weight:600; letter-spacing:0.01em;}
+  .section-head .eyebrow{margin:0;}
+
+  /* ---------- two-col layout ---------- */
+  .row-2{display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:22px;}
+
+  .chart-panel{padding:20px; height:300px; display:flex; flex-direction:column;}
+  .chart-panel canvas{flex:1;}
+
+  /* ranking */
+  .rank-panel{padding:18px 20px;}
+  .rank-item{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border);}
+  .rank-item:last-child{border-bottom:none;}
+  .rank-pos{
+    width:22px; height:22px; border-radius:3px; background:var(--panel-2); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono'; font-size:11px; color:var(--text-muted); flex-shrink:0;
+  }
+  .rank-item:nth-child(1) .rank-pos{border-color:var(--normal); color:var(--normal);}
+  .rank-name{flex:1; font-size:13px; font-weight:500;}
+  .rank-bar-track{flex:1; height:5px; background:var(--panel-2); border-radius:3px; overflow:hidden; margin:0 10px;}
+  .rank-bar-fill{height:100%; background:linear-gradient(90deg, var(--blue), var(--normal)); border-radius:3px;}
+  .rank-count{font-family:'IBM Plex Mono'; font-size:12px; color:var(--text-muted); width:26px; text-align:right;}
+
+  /* faixa cards */
+  .faixa-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px;}
+  .faixa-card{padding:18px 20px; border-left:3px solid var(--border);}
+  .faixa-card.critico{border-left-color:var(--critico); background:linear-gradient(180deg, var(--critico-dim) 0%, var(--panel) 40%);}
+  .faixa-card.atencao{border-left-color:var(--atencao); background:linear-gradient(180deg, var(--atencao-dim) 0%, var(--panel) 40%);}
+  .faixa-card.normal{border-left-color:var(--normal); background:linear-gradient(180deg, var(--normal-dim) 0%, var(--panel) 40%);}
+  .faixa-card .top-row{display:flex; justify-content:space-between; align-items:flex-start;}
+  .faixa-card .label{font-family:'Space Grotesk'; font-size:13px; font-weight:600;}
+  .faixa-card .sub{font-size:11px; color:var(--text-muted); margin-top:2px;}
+  .faixa-card .count{font-family:'IBM Plex Mono'; font-size:26px; font-weight:600;}
+  .faixa-card.critico .count{color:var(--critico);}
+  .faixa-card.atencao .count{color:var(--atencao);}
+  .faixa-card.normal .count{color:var(--normal);}
+
+  /* critical list */
+  .crit-panel{padding:18px 20px; margin-bottom:22px;}
+  .crit-list{display:flex; flex-direction:column; gap:8px; margin-top:6px;}
+  .crit-row{
+    display:flex; align-items:center; gap:12px;
+    padding:10px 12px; background:var(--panel-2); border:1px solid var(--border); border-radius:4px;
+  }
+  .pulse{width:6px; height:6px; border-radius:50%; background:var(--critico); flex-shrink:0; animation:pulse-dot-red 1.8s infinite;}
+  @keyframes pulse-dot-red{
+    0%{box-shadow:0 0 0 0 rgba(255,92,92,0.5);}
+    70%{box-shadow:0 0 0 6px rgba(255,92,92,0);}
+    100%{box-shadow:0 0 0 0 rgba(255,92,92,0);}
+  }
+  @media (prefers-reduced-motion: reduce){ .pulse{animation:none;} }
+  .crit-veic{font-family:'IBM Plex Mono'; font-size:12.5px; font-weight:600; width:110px; flex-shrink:0;}
+  .crit-info{flex:1; font-size:12.5px; color:var(--text-muted);}
+  .crit-dias{font-family:'IBM Plex Mono'; font-size:13px; color:var(--critico); font-weight:600; flex-shrink:0;}
+
+  /* ---------- filters / search ---------- */
+  .filter-bar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:14px 16px; margin-bottom:16px;
+  }
+  .search-input{
+    flex:1; min-width:220px;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:4px;
+    padding:9px 12px; color:var(--text); font-family:'Inter'; font-size:13px;
+  }
+  .search-input:focus{outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue);}
+  .search-input::placeholder{color:var(--text-dim);}
+  .filter-chip{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:20px;
+    padding:7px 14px; font-size:12px; color:var(--text-muted); cursor:pointer;
+    font-family:'IBM Plex Mono'; transition:all .15s ease;
+    user-select:none;
+  }
+  .filter-chip:hover{border-color:var(--text-dim); color:var(--text);}
+  .filter-chip:focus-visible{outline:2px solid var(--blue); outline-offset:2px;}
+  .filter-chip.active{background:var(--blue-dim); border-color:var(--blue); color:#BFD7FF;}
+  .filter-chip.active.critico{background:var(--critico-dim); border-color:var(--critico); color:#FFC2C2;}
+  .filter-chip.active.atencao{background:var(--atencao-dim); border-color:var(--atencao); color:#FFDDA0;}
+  .filter-chip.active.normal{background:var(--normal-dim); border-color:var(--normal); color:#A9F2DD;}
+
+  /* ---------- table ---------- */
+  .table-panel{padding:0; overflow:hidden;}
+  .table-scroll{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  thead th{
+    text-align:left; padding:12px 16px; font-family:'IBM Plex Mono'; font-size:10.5px;
+    letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim);
+    border-bottom:1px solid var(--border); background:var(--panel-2);
+    cursor:pointer; white-space:nowrap; user-select:none;
+  }
+  thead th:hover{color:var(--text-muted);}
+  thead th .arrow{opacity:0.4; margin-left:4px;}
+  tbody td{padding:11px 16px; border-bottom:1px solid var(--border); color:var(--text);}
+  tbody tr:hover{background:rgba(255,255,255,0.02);}
+  tbody tr:last-child td{border-bottom:none;}
+  td.veic{font-family:'IBM Plex Mono'; font-weight:600;}
+  td.dias{font-family:'IBM Plex Mono';}
+  .status-pill{
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 9px; border-radius:20px; font-size:10.5px; font-weight:600;
+    font-family:'IBM Plex Mono'; text-transform:uppercase; letter-spacing:0.03em;
+  }
+  .status-pill.critico{background:var(--critico-dim); color:#FF8A8A;}
+  .status-pill.atencao{background:var(--atencao-dim); color:#FFC466;}
+  .status-pill.normal{background:var(--normal-dim); color:#5CE8C4;}
+  .status-pill::before{content:''; width:5px; height:5px; border-radius:50%; background:currentColor;}
+
+  .table-footer{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; font-family:'IBM Plex Mono'; font-size:11px; color:var(--text-dim);
+    border-top:1px solid var(--border);
+  }
+
+  footer{
+    text-align:center; padding:26px; color:var(--text-dim);
+    font-family:'IBM Plex Mono'; font-size:11px;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1100px){
+    .kpi-grid{grid-template-columns:repeat(3,1fr);}
+    .row-2{grid-template-columns:1fr;}
+    .faixa-grid{grid-template-columns:1fr;}
+  }
+  @media (max-width: 640px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .header-status{display:none;}
+    main{padding:16px;}
+    .crit-info{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="brand">
+      <div class="brand-mark">LF</div>
+      <div class="brand-text">
+        <h1>Controle de Frota Parada</h1>
+        <span>LOC FROTA · PAINEL OPERACIONAL</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="live-label"><span class="live-dot"></span> DADOS AO VIVO</div>
+      <div id="clock" class="mono">--:--:--</div>
+    </div>
+  </div>
+  <div class="ticker-wrap">
+    <div class="ticker" id="ticker">Carregando alertas da frota…</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPIs -->
+  <section class="kpi-grid" id="kpiGrid" aria-label="Indicadores executivos"></section>
+
+  <!-- Evolução + Ranking -->
+  <div class="row-2">
+    <div class="panel chart-panel">
+      <div class="section-head">
+        <h2>Distribuição de veículos por dias parado</h2>
+        <span class="eyebrow" id="evoRange">DADOS ATUAIS</span>
+      </div>
+      <canvas id="evoChart"></canvas>
+    </div>
+    <div class="panel rank-panel">
+      <div class="section-head">
+        <h2>Ranking de atendentes</h2>
+        <span class="eyebrow">POR VEÍCULOS EM CARTEIRA</span>
+      </div>
+      <div id="rankList"></div>
+    </div>
+  </div>
+
+  <!-- Faixas -->
+  <section class="faixa-grid" id="faixaGrid" aria-label="Veículos por faixa de dias"></section>
+
+  <!-- Críticos -->
+  <section class="panel crit-panel">
+    <div class="section-head">
+      <h2>🚨 Veículos críticos (≥ 4 dias parados)</h2>
+      <span class="eyebrow" id="critCount">0 VEÍCULOS</span>
+    </div>
+    <div class="crit-list" id="critList"></div>
+  </section>
+
+  <!-- Filtros -->
+  <div class="panel filter-bar">
+    <input type="text" class="search-input" id="searchInput" placeholder="Buscar por placa, veículo, atendente, cliente ou fornecedor…">
+    <select id="atendenteSelect" class="search-input" style="flex:0 0 200px; cursor:pointer;">
+      <option value="todos">Todos os atendentes</option>
+    </select>
+    <div class="filter-chip active" data-status="todos">Todos</div>
+    <div class="filter-chip" data-status="critico">Crítico</div>
+    <div class="filter-chip" data-status="atencao">Atenção</div>
+    <div class="filter-chip" data-status="normal">Normal</div>
+  </div>
+
+  <!-- Tabela -->
+  <section class="panel table-panel">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-key="placa">Placa <span class="arrow"></span></th>
+            <th data-key="veiculo">Veículo <span class="arrow"></span></th>
+            <th data-key="atendente">Atendente <span class="arrow"></span></th>
+            <th data-key="cliente">Cliente <span class="arrow"></span></th>
+            <th data-key="fornecedor">Fornecedor <span class="arrow"></span></th>
+            <th data-key="motivo">Motivo</th>
+            <th data-key="dias">Dias parado <span class="arrow"></span></th>
+            <th data-key="status">Status <span class="arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span id="rowCount">0 registros</span>
+      <span>ATUALIZADO AO ABRIR A PÁGINA</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>CONTROLE DE FROTA PARADA — v2.0 · LAYOUT COM DADOS DE EXEMPLO · PRÓXIMA ETAPA: INTEGRAÇÃO GOOGLE SHEETS</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+/* ============================================================
+   INTEGRACAO GOOGLE SHEETS - Etapa 2
+   Le cada aba de atendente via endpoint publico (gviz CSV) e
+   combina tudo em um unico array. Requer que a planilha esteja
+   compartilhada como "Qualquer pessoa com o link pode visualizar".
+   ============================================================ */
+const SPREADSHEET_ID = '1Bk1LEYRj--LbEZx7gs8CMOlrR4kUcpVp';
+const ATENDENTES = [
+  { nome: 'Diego Souza',      gid: '178284291' },
+  { nome: 'Pedro Afonso',     gid: '425722359' },
+  { nome: 'Cassiano Soares',  gid: '1599838857' },
+  { nome: 'Gabriel Lima',     gid: '971139963' },
+  { nome: 'Leonardo Reis',    gid: '2095742271' },
+  { nome: 'Henrique Regis',   gid: '1553752893' },
+  { nome: 'Rafael Oelze',     gid: '1442892449' },
+  { nome: 'Pedro Costa',      gid: '570542906' },
+  { nome: 'Lidiel Pinheiro',  gid: '1759959357' },
+  { nome: 'Jonathan',         gid: '1220314247' },
+];
+
+function csvUrl(gid){
+  return 'https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID + '/gviz/tq?tqx=out:csv&gid=' + gid;
+}
+
+function classificar(dias){
+  if(!Number.isFinite(dias)) return 'normal';
+  if(dias >= 4) return 'critico';
+  if(dias >= 2) return 'atencao';
+  return 'normal';
+}
+
+async function fetchAba(atendente){
+  try{
+    const resp = await fetch(csvUrl(atendente.gid));
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    const parsed = Papa.parse(text, { skipEmptyLines: false });
+    const rows = parsed.data;
+
+    var headerIdx = -1;
+    for(var h=0; h<rows.length; h++){
+      if((rows[h][0] || '').trim() === 'Código'){ headerIdx = h; break; }
+    }
+    if(headerIdx === -1) return [];
+    const headers = rows[headerIdx];
+    const col = {};
+    headers.forEach(function(h, i){ if(h && h.trim()) col[h.trim()] = i; });
+
+    const out = [];
+    for(var i = headerIdx + 1; i < rows.length; i++){
+      const r = rows[i];
+      const codigo = (r[col['Código']] || '').trim();
+      const placa = (r[col['Placa']] || '').trim();
+      if(!codigo && !placa) continue;
+      const diasParado = parseInt((r[col['Dias Parado']] || '').trim(), 10);
+      out.push({
+        codigo: codigo,
+        motivo: (r[col['Motivo']] || '').trim(),
+        placa: placa,
+        veiculo: (r[col['Modelo']] || '').trim(),
+        cliente: (r[col['Cliente']] || '').trim(),
+        fornecedor: (r[col['Fornecedor']] || '-').trim() || '-',
+        cidade: (r[col['Cidade']] || '').trim(),
+        dias: Number.isFinite(diasParado) ? diasParado : 0,
+        situacaoAtual: (r[col['Situação Atual']] || '').trim(),
+        pendencia: (r[col['Pendência']] || '').trim(),
+        atendente: atendente.nome
+      });
+    }
+    return out.map(function(v){ return Object.assign({}, v, { status: classificar(v.dias) }); });
+  }catch(err){
+    console.error('Falha ao carregar aba de ' + atendente.nome + ':', err);
+    return null;
+  }
+}
+
+let frota = [];
+let atendentesComErro = [];
+
+async function carregarFrota(){
+  const resultados = await Promise.all(ATENDENTES.map(fetchAba));
+  resultados.forEach(function(res, i){
+    if(res === null){ atendentesComErro.push(ATENDENTES[i].nome); }
+    else{ frota = frota.concat(res); }
+  });
+  return frota;
+}
+</script>
+<script>
+/* ============================================================
+   RENDERIZACAO - roda depois que "frota" foi carregada do Sheets
+   ============================================================ */
+function renderDashboard(){
+
+/* ---------- KPIs ---------- */
+const total = frota.length;
+const mediaDias = (frota.reduce((s,v)=>s+v.dias,0)/total).toFixed(1);
+const criticos = frota.filter(v=>v.status==='critico').length;
+const atencao = frota.filter(v=>v.status==='atencao').length;
+const normais = frota.filter(v=>v.status==='normal').length;
+
+const kpiData = [
+  {label:'Total de veículos parados', value: total, accent:'blue', delta:'+3 vs. ontem', deltaClass:'up'},
+  {label:'Média de dias parado', value: mediaDias, accent:'', delta:'-0.4 vs. semana', deltaClass:'down'},
+  {label:'Críticos (≥4 dias)', value: criticos, accent:'critico', delta:`${((criticos/total)*100).toFixed(0)}% da frota`, deltaClass:''},
+  {label:'Em atenção (2-3 dias)', value: atencao, accent:'atencao', delta:`${((atencao/total)*100).toFixed(0)}% da frota`, deltaClass:''},
+  {label:'Normais (≤1 dia)', value: normais, accent:'normal', delta:`${((normais/total)*100).toFixed(0)}% da frota`, deltaClass:''},
+];
+
+document.getElementById('kpiGrid').innerHTML = kpiData.map(k => `
+  <div class="panel kpi ${k.accent?'accent-'+k.accent:''}">
+    <div class="eyebrow">${k.label}</div>
+    <div class="value mono">${k.value}</div>
+    <div class="delta ${k.deltaClass}">${k.delta}</div>
+  </div>
+`).join('');
+
+/* ---------- Ranking atendentes ---------- */
+const rankMap = {};
+frota.forEach(v => rankMap[v.atendente] = (rankMap[v.atendente]||0)+1);
+const rankArr = Object.entries(rankMap).sort((a,b)=>b[1]-a[1]);
+const maxRank = rankArr.length ? rankArr[0][1] : 1;
+document.getElementById('rankList').innerHTML = rankArr.map((r,i) => `
+  <div class="rank-item">
+    <div class="rank-pos">${i+1}</div>
+    <div class="rank-name">${r[0]}</div>
+    <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${(r[1]/maxRank*100).toFixed(0)}%"></div></div>
+    <div class="rank-count mono">${r[1]}</div>
+  </div>
+`).join('');
+
+/* ---------- Faixas ---------- */
+const faixas = [
+  {key:'critico', label:'Crítico', sub:'≥ 4 dias parado', count: criticos},
+  {key:'atencao', label:'Atenção', sub:'2 a 3 dias parado', count: atencao},
+  {key:'normal', label:'Normal', sub:'≤ 1 dia parado', count: normais},
+];
+document.getElementById('faixaGrid').innerHTML = faixas.map(f => `
+  <div class="panel faixa-card ${f.key}">
+    <div class="top-row">
+      <div>
+        <div class="label">${f.label}</div>
+        <div class="sub">${f.sub}</div>
+      </div>
+      <div class="count mono">${f.count}</div>
+    </div>
+  </div>
+`).join('');
+
+/* ---------- Críticos ---------- */
+const criticosLista = frota.filter(v=>v.status==='critico').sort((a,b)=>b.dias-a.dias);
+document.getElementById('critCount').textContent = `${criticosLista.length} VEÍCULOS`;
+document.getElementById('critList').innerHTML = criticosLista.length ? criticosLista.map(v => `
+  <div class="crit-row">
+    <span class="pulse"></span>
+    <span class="crit-veic">${v.placa}</span>
+    <span class="crit-info">${v.veiculo} · ${v.atendente} · ${v.motivo} · ${v.fornecedor}</span>
+    <span class="crit-dias">${v.dias}d</span>
+  </div>
+`).join('') : '<div style="color:var(--text-dim); font-size:13px; padding:10px 0;">Nenhum veículo crítico no momento.</div>';
+
+/* ---------- Distribuição por dias parado (dados reais, canvas nativo) ---------- */
+function desenharEvolucao(){
+  const canvas = document.getElementById('evoChart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // agrupa por faixa de dias parado
+  const buckets = [
+    { label: '0', test: d => d === 0 },
+    { label: '1', test: d => d === 1 },
+    { label: '2', test: d => d === 2 },
+    { label: '3', test: d => d === 3 },
+    { label: '4-6', test: d => d >= 4 && d <= 6 },
+    { label: '7-10', test: d => d >= 7 && d <= 10 },
+    { label: '11+', test: d => d >= 11 },
+  ];
+  const serie = buckets.map(b => frota.filter(v => b.test(v.dias)).length);
+  const cores = ['#2ED3A6','#2ED3A6','#F5A623','#F5A623','#FF5C5C','#FF5C5C','#FF5C5C'];
+
+  const w = rect.width, h = rect.height;
+  const padL = 30, padB = 22, padT = 10, padR = 10;
+  const max = Math.max(1, ...serie) * 1.2;
+  const n = buckets.length;
+  const slot = (w - padL - padR) / n;
+  const barW = slot * 0.55;
+
+  ctx.clearRect(0,0,w,h);
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for(let i=0;i<=3;i++){
+    const y = padT + (h - padT - padB) * (i/3);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w-padR, y); ctx.stroke();
+  }
+
+  // barras
+  serie.forEach((v,i)=>{
+    const x = padL + slot*i + (slot-barW)/2;
+    const barH = (h - padT - padB) * (v/max);
+    const y = h - padB - barH;
+    ctx.fillStyle = cores[i];
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x, y, barW, barH);
+    ctx.globalAlpha = 1;
+
+    // valor acima da barra
+    if(v > 0){
+      ctx.fillStyle = 'rgba(231,234,240,0.9)';
+      ctx.font = '600 11px IBM Plex Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(v, x + barW/2, y - 6);
+    }
+
+    // label do eixo x
+    ctx.fillStyle = 'rgba(139,145,163,0.8)';
+    ctx.font = '10px IBM Plex Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(buckets[i].label, x + barW/2, h - 6);
+  });
+
+  // y labels
+  ctx.fillStyle = 'rgba(139,145,163,0.8)';
+  ctx.font = '10px IBM Plex Mono';
+  ctx.textAlign = 'right';
+  for(let i=0;i<=3;i++){
+    const val = Math.round(max * (1 - i/3));
+    const y = padT + (h - padT - padB) * (i/3);
+    ctx.fillText(val, padL - 6, y + 3);
+  }
+}
+window.addEventListener('resize', desenharEvolucao);
+
+/* ---------- Ticker de alertas ---------- */
+const alertas = criticosLista.slice(0,6).map(v => `<b>${v.placa}</b> parado há ${v.dias} dias — ${v.motivo} (${v.atendente})`);
+document.getElementById('ticker').innerHTML = alertas.length
+  ? alertas.join('&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;')
+  : (atendentesComErro.length
+      ? `<b>Falha ao carregar dados de: ${atendentesComErro.join(', ')}</b> — verifique se as abas estão publicadas/compartilhadas.`
+      : 'Nenhum alerta crítico no momento.');
+
+desenharEvolucao();
+renderTable();
+
+} /* fim de renderDashboard() */
+
+/* ---------- Tabela ---------- */
+let sortKey = 'dias';
+let sortDir = -1;
+let statusFilter = 'todos';
+let atendenteFilter = 'todos';
+let searchTerm = '';
+
+function renderTable(){
+  let rows = frota.filter(v => {
+    const matchStatus = statusFilter === 'todos' || v.status === statusFilter;
+    const matchAtendente = atendenteFilter === 'todos' || v.atendente === atendenteFilter;
+    const term = searchTerm.toLowerCase();
+    const matchSearch = !term || [v.placa, v.veiculo, v.atendente, v.cliente, v.fornecedor].some(f => (f||'').toLowerCase().includes(term));
+    return matchStatus && matchAtendente && matchSearch;
+  });
+
+  rows.sort((a,b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if(typeof av === 'string'){ av = av.toLowerCase(); bv = bv.toLowerCase(); }
+    if(av < bv) return -1*sortDir;
+    if(av > bv) return 1*sortDir;
+    return 0;
+  });
+
+  document.getElementById('tableBody').innerHTML = rows.map(v => `
+    <tr>
+      <td class="veic">${v.placa}</td>
+      <td>${v.veiculo}</td>
+      <td>${v.atendente}</td>
+      <td>${v.cliente || '-'}</td>
+      <td>${v.fornecedor}</td>
+      <td>${v.motivo}</td>
+      <td class="dias">${v.dias}d</td>
+      <td><span class="status-pill ${v.status}">${v.status}</span></td>
+    </tr>
+  `).join('');
+
+  document.getElementById('rowCount').textContent = `${rows.length} registro${rows.length!==1?'s':''}`;
+}
+
+document.querySelectorAll('thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if(sortKey === key){ sortDir *= -1; } else { sortKey = key; sortDir = 1; }
+    document.querySelectorAll('thead .arrow').forEach(a => a.textContent = '');
+    th.querySelector('.arrow').textContent = sortDir === 1 ? '↑' : '↓';
+    renderTable();
+  });
+});
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  searchTerm = e.target.value;
+  renderTable();
+});
+
+document.getElementById('atendenteSelect').addEventListener('change', (e) => {
+  atendenteFilter = e.target.value;
+  renderTable();
+});
+
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active','critico','atencao','normal'));
+    chip.classList.add('active');
+    if(chip.dataset.status !== 'todos') chip.classList.add(chip.dataset.status);
+    statusFilter = chip.dataset.status;
+    renderTable();
+  });
+});
+
+/* ---------- Relógio ---------- */
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleString('pt-BR', {
+    day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+/* ---------- Init: carrega o Sheets e então renderiza tudo ---------- */
+carregarFrota().then(() => {
+  const select = document.getElementById('atendenteSelect');
+  ATENDENTES.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.nome;
+    opt.textContent = a.nome;
+    select.appendChild(opt);
+  });
+  renderDashboard();
+});
+</script>
+</body>
+</html>
