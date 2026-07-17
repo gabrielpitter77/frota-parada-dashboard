@@ -145,8 +145,8 @@
   /* ---------- two-col layout ---------- */
   .row-2{display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:22px;}
 
-  .chart-panel{padding:20px; height:300px; display:flex; flex-direction:column;}
-  .chart-panel canvas{flex:1;}
+  .chart-panel{padding:20px; height:300px; display:flex; flex-direction:column; overflow:hidden;}
+  .chart-panel canvas{flex:1; min-height:0; min-width:0; display:block;}
 
   /* ranking */
   .rank-panel{padding:18px 20px;}
