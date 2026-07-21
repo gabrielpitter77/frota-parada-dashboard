@@ -479,6 +479,18 @@ async function carregarFrota(){
 /* ============================================================
    RENDERIZACAO - roda depois que "frota" foi carregada do Sheets
    ============================================================ */
+const DIAS_BUCKETS = [
+  { key: '0', label: '0', test: d => d === 0 },
+  { key: '1', label: '1', test: d => d === 1 },
+  { key: '2', label: '2', test: d => d === 2 },
+  { key: '3', label: '3', test: d => d === 3 },
+  { key: '4-6', label: '4-6', test: d => d >= 4 && d <= 6 },
+  { key: '7-10', label: '7-10', test: d => d >= 7 && d <= 10 },
+  { key: '11+', label: '11+', test: d => d >= 11 },
+];
+let diasBucketFilter = null; // null = sem filtro por barra
+let barRects = []; // preenchido a cada desenho do gráfico, usado no clique
+
 function renderDashboard(){
 
 /* ---------- KPIs ---------- */
@@ -584,6 +596,10 @@ renderCriticos();
 /* ---------- Distribuição por dias parado (dados reais, canvas nativo) ---------- */
 function desenharEvolucao(){
   const canvas = document.getElementById('evoChart');
+  const evoRangeEl = document.getElementById('evoRange');
+  if(evoRangeEl){
+    evoRangeEl.textContent = diasBucketFilter ? `FILTRANDO: ${diasBucketFilter} DIAS` : 'DADOS ATUAIS';
+  }
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
@@ -591,18 +607,9 @@ function desenharEvolucao(){
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  // agrupa por faixa de dias parado
-  const buckets = [
-    { label: '0', test: d => d === 0 },
-    { label: '1', test: d => d === 1 },
-    { label: '2', test: d => d === 2 },
-    { label: '3', test: d => d === 3 },
-    { label: '4-6', test: d => d >= 4 && d <= 6 },
-    { label: '7-10', test: d => d >= 7 && d <= 10 },
-    { label: '11+', test: d => d >= 11 },
-  ];
+  const buckets = DIAS_BUCKETS;
   const serie = buckets.map(b => frota.filter(v => b.test(v.dias)).length);
-  const cores = ['#2ED3A6','#2ED3A6','#F5A623','#F5A623','#FF5C5C','#FF5C5C','#FF5C5C'];
+  const coresBase = ['#2ED3A6','#2ED3A6','#F5A623','#F5A623','#FF5C5C','#FF5C5C','#FF5C5C'];
 
   const w = rect.width, h = rect.height;
   const padL = 30, padB = 22, padT = 10, padR = 10;
@@ -621,14 +628,31 @@ function desenharEvolucao(){
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w-padR, y); ctx.stroke();
   }
 
+  barRects = [];
+
   // barras
   serie.forEach((v,i)=>{
     const x = padL + slot*i + (slot-barW)/2;
     const barH = (h - padT - padB) * (v/max);
     const y = h - padB - barH;
-    ctx.fillStyle = cores[i];
-    ctx.globalAlpha = 0.85;
+    const selecionada = diasBucketFilter === buckets[i].key;
+
+    // área clicável cobre a coluna inteira (mais fácil de acertar que só a barra)
+    barRects.push({ x: padL + slot*i, y: padT, width: slot, height: h - padT - padB, key: buckets[i].key });
+
+    if(selecionada){
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(padL + slot*i, padT, slot, h - padT - padB);
+    }
+
+    ctx.fillStyle = coresBase[i];
+    ctx.globalAlpha = selecionada ? 1 : 0.85;
     ctx.fillRect(x, y, barW, barH);
+    if(selecionada){
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y, barW, barH);
+    }
     ctx.globalAlpha = 1;
 
     // valor acima da barra
@@ -640,8 +664,8 @@ function desenharEvolucao(){
     }
 
     // label do eixo x
-    ctx.fillStyle = 'rgba(139,145,163,0.8)';
-    ctx.font = '10px IBM Plex Mono';
+    ctx.fillStyle = selecionada ? '#E7EAF0' : 'rgba(139,145,163,0.8)';
+    ctx.font = selecionada ? '600 10px IBM Plex Mono' : '10px IBM Plex Mono';
     ctx.textAlign = 'center';
     ctx.fillText(buckets[i].label, x + barW/2, h - 6);
   });
@@ -657,6 +681,20 @@ function desenharEvolucao(){
   }
 }
 window.addEventListener('resize', desenharEvolucao);
+
+const evoCanvasEl = document.getElementById('evoChart');
+evoCanvasEl.style.cursor = 'pointer';
+evoCanvasEl.addEventListener('click', (e) => {
+  const rect = evoCanvasEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const hit = barRects.find(b => mx >= b.x && mx <= b.x + b.width && my >= b.y && my <= b.y + b.height);
+  if(!hit) return;
+  diasBucketFilter = (diasBucketFilter === hit.key) ? null : hit.key;
+  desenharEvolucao();
+  renderTable();
+  document.querySelector('.table-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
 /* ---------- Ticker de alertas ---------- */
 const alertas = criticosLista.slice(0,6).map(v => `<b>${v.placa}</b> parado há ${v.dias} dias — ${v.motivo} (${v.atendente})`);
@@ -682,9 +720,11 @@ function renderTable(){
   let rows = frota.filter(v => {
     const matchStatus = statusFilter === 'todos' || v.status === statusFilter;
     const matchAtendente = atendenteFilter === 'todos' || v.atendente === atendenteFilter;
+    const bucket = diasBucketFilter ? DIAS_BUCKETS.find(b => b.key === diasBucketFilter) : null;
+    const matchBucket = !bucket || bucket.test(v.dias);
     const term = searchTerm.toLowerCase();
     const matchSearch = !term || [v.placa, v.veiculo, v.atendente, v.cliente, v.fornecedor].some(f => (f||'').toLowerCase().includes(term));
-    return matchStatus && matchAtendente && matchSearch;
+    return matchStatus && matchAtendente && matchBucket && matchSearch;
   });
 
   rows.sort((a,b) => {
