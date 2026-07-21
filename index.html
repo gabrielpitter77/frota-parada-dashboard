@@ -166,7 +166,12 @@
 
   /* faixa cards */
   .faixa-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px;}
-  .faixa-card{padding:18px 20px; border-left:3px solid var(--border);}
+  .faixa-card{padding:18px 20px; border-left:3px solid var(--border); transition:box-shadow .15s ease, transform .1s ease;}
+  .faixa-card:hover{transform:translateY(-1px);}
+  .faixa-card.selected{box-shadow:0 0 0 1px currentColor inset;}
+  .faixa-card.critico.selected{box-shadow:0 0 0 1px var(--critico) inset;}
+  .faixa-card.atencao.selected{box-shadow:0 0 0 1px var(--atencao) inset;}
+  .faixa-card.normal.selected{box-shadow:0 0 0 1px var(--normal) inset;}
   .faixa-card.critico{border-left-color:var(--critico); background:linear-gradient(180deg, var(--critico-dim) 0%, var(--panel) 40%);}
   .faixa-card.atencao{border-left-color:var(--atencao); background:linear-gradient(180deg, var(--atencao-dim) 0%, var(--panel) 40%);}
   .faixa-card.normal{border-left-color:var(--normal); background:linear-gradient(180deg, var(--normal-dim) 0%, var(--panel) 40%);}
@@ -534,7 +539,7 @@ const faixas = [
   {key:'normal', label:'Normal', sub:'≤ 1 dia parado', count: normais},
 ];
 document.getElementById('faixaGrid').innerHTML = faixas.map(f => `
-  <div class="panel faixa-card ${f.key}">
+  <div class="panel faixa-card ${f.key}" data-status="${f.key}" style="cursor:pointer;">
     <div class="top-row">
       <div>
         <div class="label">${f.label}</div>
@@ -544,6 +549,15 @@ document.getElementById('faixaGrid').innerHTML = faixas.map(f => `
     </div>
   </div>
 `).join('');
+
+document.querySelectorAll('.faixa-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const status = card.dataset.status;
+    const novoStatus = (statusFilter === status) ? 'todos' : status;
+    aplicarFiltroStatus(novoStatus);
+    document.querySelector('.table-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
 
 /* ---------- Críticos ---------- */
 const criticosLista = frota.filter(v=>v.status==='critico').sort((a,b)=>b.dias-a.dias);
@@ -722,14 +736,21 @@ document.getElementById('atendenteSelect').addEventListener('change', (e) => {
   renderTable();
 });
 
-document.querySelectorAll('.filter-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active','critico','atencao','normal'));
-    chip.classList.add('active');
-    if(chip.dataset.status !== 'todos') chip.classList.add(chip.dataset.status);
-    statusFilter = chip.dataset.status;
-    renderTable();
+function aplicarFiltroStatus(status){
+  statusFilter = status;
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    c.classList.remove('active','critico','atencao','normal');
+    if(c.dataset.status === status){
+      c.classList.add('active');
+      if(status !== 'todos') c.classList.add(status);
+    }
   });
+  document.querySelectorAll('.faixa-card').forEach(c => c.classList.toggle('selected', c.dataset.status === status));
+  renderTable();
+}
+
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => aplicarFiltroStatus(chip.dataset.status));
 });
 
 /* ---------- Relógio ---------- */
