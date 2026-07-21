@@ -148,7 +148,10 @@
 
   /* ranking */
   .rank-panel{padding:18px 20px;}
-  .rank-item{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border);}
+  .rank-item{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); transition:background .15s ease; border-radius:4px; padding-left:6px; padding-right:6px; margin:0 -6px;}
+  .rank-item:hover{background:rgba(255,255,255,0.03);}
+  .rank-item.active{background:var(--blue-dim);}
+  .rank-item.active .rank-name{color:#BFD7FF;}
   .rank-item:last-child{border-bottom:none;}
   .rank-pos{
     width:22px; height:22px; border-radius:3px; background:var(--panel-2); border:1px solid var(--border);
@@ -502,13 +505,27 @@ frota.forEach(v => rankMap[v.atendente] = (rankMap[v.atendente]||0)+1);
 const rankArr = Object.entries(rankMap).sort((a,b)=>b[1]-a[1]);
 const maxRank = rankArr.length ? rankArr[0][1] : 1;
 document.getElementById('rankList').innerHTML = rankArr.map((r,i) => `
-  <div class="rank-item">
+  <div class="rank-item" data-atendente="${r[0]}" style="cursor:pointer;">
     <div class="rank-pos">${i+1}</div>
     <div class="rank-name">${r[0]}</div>
     <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${(r[1]/maxRank*100).toFixed(0)}%"></div></div>
     <div class="rank-count mono">${r[1]}</div>
   </div>
 `).join('');
+
+document.querySelectorAll('.rank-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const nome = item.dataset.atendente;
+    const select = document.getElementById('atendenteSelect');
+    // alterna: clicar de novo no mesmo atendente já selecionado volta pra "todos"
+    const novoValor = (atendenteFilter === nome) ? 'todos' : nome;
+    select.value = novoValor;
+    atendenteFilter = novoValor;
+    document.querySelectorAll('.rank-item').forEach(i => i.classList.toggle('active', i.dataset.atendente === novoValor));
+    renderTable();
+    document.querySelector('.table-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
 
 /* ---------- Faixas ---------- */
 const faixas = [
@@ -701,6 +718,7 @@ document.getElementById('searchInput').addEventListener('input', (e) => {
 
 document.getElementById('atendenteSelect').addEventListener('change', (e) => {
   atendenteFilter = e.target.value;
+  document.querySelectorAll('.rank-item').forEach(i => i.classList.toggle('active', i.dataset.atendente === atendenteFilter));
   renderTable();
 });
 
